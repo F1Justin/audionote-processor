@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.mypy_cache/
+.pytest_cache/
+.venv/
+venv/
+
+# Env & logs
+.env
+.env.*
+*.log
+*.out
+*.err
+processor.log
+monitor.out
+monitor.err
+
+# Project data (user-specific)
+tmp_vault/
+transcripts/
+schedule.ics
+
+# IDE
+.vscode/
+.idea/
+
