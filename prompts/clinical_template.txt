@@ -26,7 +26,7 @@ transcript_file: "[[{transcript_filename}]]"
 ---
 
 ## Part 2: Markdown Body
-- Start with a single, powerful sentence (one-sentence summary), then a horizontal rule `---`.
+- Start with a single, powerful sentence (one-sentence summary), and then a **blank line**, and then a horizontal rule (`---`).
 - Your Markdown body MUST contain the following second-level headers (exact text, exact order):
   1) `📖 核心概念`
   2) `🩺 临床表现与评估`
@@ -35,9 +35,12 @@ transcript_file: "[[{transcript_filename}]]"
   5) `🧠 Anki 卡片`
 - Under each header, write concise, structured content from the transcript.
 - For Anki cards:
-  - Use double curly braces, e.g. `{{c1::答案}}`.
-  - For each single card line, use only `c1` for all clozes on that line (do not mix c2, c3 on the same line).
-  - Keep cards atomic and memorizable.
+    - **CRITICAL FORMATTING RULE**: Each flashcard MUST be a single paragraph. You MUST separate each flashcard from the next with **one single blank line**. Do NOT use bullet points (`-` or `*`).
+    - **Syntax**:
+    - All cloze deletions MUST use double curly braces, e.g., `{{c1::Answer}}`.
+    - On any single flashcard line, all cloze deletions MUST use the same index, `c1`. Do not use `c2`, `c3` etc. on the same line.
+    - **Content**: The flashcards should be atomic (represent a single idea) and highly memorizable.
+    - **Restriction**: Cloze syntax (e.g., `{{c1::...}}`) MUST appear ONLY in this `🧠 Anki 卡片` section. Do NOT use cloze in any other section.
 
 # User Input Format
 [METADATA_FOR_CONTEXT_ONLY]

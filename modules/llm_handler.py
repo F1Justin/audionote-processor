@@ -61,11 +61,10 @@ class LLMHandler:
     def _post_process_note(self, content: str) -> str:
         # 统一分割线
         s = content.replace("***", "---")
-        # 修复 Anki 括号与序号：{cN::...} -> {{c1::...}}
+        # 将 cloze 仅保留在 Anki 部分：
+        # 1) 先整体修复 Anki 括号与序号：{cN::...} -> {{c1::...}}
         s = re.sub(r"\{c\d+::(.*?)\}", r"{{c1::\1}}", s)
-        # 清理“一句话总结”标题行（保留正文）
-        s = re.sub(r"(?mi)^\s*###\s*\d*\.?\s*(One-Sentence Summary|一句话总结)\s*\n", "", s)
-        # 去除 Anki 段落中的列表前缀
+        # 2) 在非 Anki 段落中，去掉任何 {{c1::...}} 标记，仅保留内部文字
         lines = s.splitlines()
         out_lines = []
         in_anki = False
@@ -75,6 +74,35 @@ class LLMHandler:
                 out_lines.append(line)
                 continue
             if in_anki:
+                # 保留 Anki 段落内容
+                out_lines.append(line)
+                # 离开段落：遇到下一节标题
+                if re.match(r"^\s*##\s+", line):
+                    in_anki = False
+            else:
+                # 非 anki 段：剥离 cloze 标记，只保留文本
+                line = re.sub(r"\{\{c1::(.*?)\}\}", r"\1", line)
+                out_lines.append(line)
+        s = "\n".join(out_lines)
+        # 清理“一句话总结”标题行（保留正文）
+        s = re.sub(r"(?mi)^\s*###\s*\d*\.?\s*(One-Sentence Summary|一句话总结)\s*\n", "", s)
+        # 去除 Anki 段落中的列表前缀
+        lines = s.splitlines()
+        out_lines = []
+        in_anki = False
+        inserted_blank_after_anki = False
+        for line in lines:
+            if re.match(r"^\s*##\s*🧠\s*Anki\s*卡片\s*$", line) or re.match(r"^\s*##\s*Anki\s*卡片\s*$", line):
+                in_anki = True
+                inserted_blank_after_anki = False
+                out_lines.append(line)
+                continue
+            if in_anki:
+                # 确保标题后第一行为空行
+                if not inserted_blank_after_anki:
+                    if line.strip() != "":
+                        out_lines.append("")
+                    inserted_blank_after_anki = True
                 if re.match(r"^\s*##\s+", line):
                     in_anki = False
                     out_lines.append(line)

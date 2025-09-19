@@ -27,6 +27,8 @@ transcripts/
 schedule.ics
 
 # IDE
+run_processor.sh
+run_processor
 .vscode/
 .idea/
 
