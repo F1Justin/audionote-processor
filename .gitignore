@@ -13,7 +13,6 @@ venv/
 
 # Env & logs
 .env
-.env.*
 *.log
 *.out
 *.err
@@ -22,6 +21,7 @@ monitor.out
 monitor.err
 
 # Project data (user-specific)
+Principle.md
 tmp_vault/
 transcripts/
 schedule.ics
