@@ -24,7 +24,7 @@ monitor.err
 Principle.md
 tmp_vault/
 transcripts/
-schedule.ics
+*.ics
 
 # IDE
 run_processor.sh
