@@ -31,7 +31,7 @@ transcript_file: "[[{transcript_filename}]]"
 - Your Markdown body MUST contain the following second-level headers (exact text, exact order):
   1) `📖 核心概念`
   2) `🩺 临床表现与评估`
-  3) `💉 治疗与护理措施`
+  3) `💉 护理诊断与护理措施`
   4) `⚠️ 考点与易错点`
   5) `🧠 Anki 卡片`
 - Under each header, write concise, structured content from the transcript.
