@@ -61,9 +61,16 @@ class LLMHandler:
     def _post_process_note(self, content: str) -> str:
         # 统一分割线
         s = content.replace("***", "---")
+        # 规范化 Anki 标题：兼容 ##/###、是否含表情、英文/中文写法
+        s = re.sub(
+            r"(?mi)^\s*#{2,}\s*(?:🧠\s*)?(?:Anki\s*卡片|Anki\s*Cards|Anki)\s*$",
+            "## 🧠 Anki 卡片",
+            s,
+        )
         # 将 cloze 仅保留在 Anki 部分：
         # 1) 先整体修复 Anki 括号与序号：{cN::...} -> {{c1::...}}
-        s = re.sub(r"\{c\d+::(.*?)\}", r"{{c1::\1}}", s)
+        s = re.sub(r"\{c\d+::(.*?)\}", r"{{c1::\1}}", s)           # 单大括号 → 双大括号 c1
+        s = re.sub(r"\{\{c\d+::(.*?)\}\}", r"{{c1::\1}}", s)      # 双大括号 cN → c1
         # 2) 在非 Anki 段落中，去掉任何 {{c1::...}} 标记，仅保留内部文字
         lines = s.splitlines()
         out_lines = []
@@ -81,7 +88,7 @@ class LLMHandler:
                     in_anki = False
             else:
                 # 非 anki 段：剥离 cloze 标记，只保留文本
-                line = re.sub(r"\{\{c1::(.*?)\}\}", r"\1", line)
+                line = re.sub(r"\{\{c\d+::(.*?)\}\}", r"\1", line)
                 out_lines.append(line)
         s = "\n".join(out_lines)
         # 清理“一句话总结”标题行（保留正文）
@@ -144,54 +151,12 @@ class LLMHandler:
         return has_any
 
     def _second_pass_fix_anki_via_llm(self, anki_text: str) -> Optional[str]:
-        try:
-            system = (
-                "You strictly transform each input line into ONE Cloze Deletion card. "
-                "Rules: use only double curly braces like {{c1::...}}; use c1 for all clozes on the same line; "
-                "no bullets; one blank line between cards; keep order; Chinese output; no headings, no explanations, output ONLY the rewritten lines."
-            )
-            user = (
-                "将下列各行改写为填空题（Cloze），严格使用双大括号 {{c1::...}}，每行至少一个空，保持原顺序，"
-                "不要添加任何多余文字或标题，行与行之间用一个空行分隔：\n\n" + anki_text
-            )
-            resp = self.client.chat.completions.create(
-                model=self.config.llm_model_name,
-                temperature=0.0,
-                max_tokens=min(self.config.llm_max_tokens, 4000),
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-            )
-            fixed = (resp.choices[0].message.content or "").strip()
-            if fixed:
-                # 简单校验：是否包含 cloze
-                if re.search(r"\{\{c\d+::.*?\}\}", fixed):
-                    return fixed
-            return None
-        except Exception as e:
-            self.logger.error("[ERROR] Second-pass Anki fix failed: %s", e)
-            return None
+        # 已禁用
+        return None
 
     def _maybe_fix_anki_cloze_via_llm(self, note_md: str) -> str:
-        bounds = self._extract_anki_bounds(note_md)
-        if not bounds:
-            return note_md
-        lines = note_md.splitlines()
-        body = "\n".join(lines[bounds["start"]:bounds["end"]]).strip("\n")
-        if not self._needs_cloze(body):
-            return note_md
-        self.logger.warning("[WARN] No Cloze detected in Anki section. Triggering second-pass fix.")
-        fixed = self._second_pass_fix_anki_via_llm(body)
-        if not fixed:
-            return note_md
-        # 重新装配：确保标题后空一行
-        new_lines = lines[:bounds["header"] + 1]
-        if (bounds["start"] >= len(lines)) or lines[bounds["start"]].strip() != "":
-            new_lines.append("")
-        new_lines.extend(fixed.splitlines())
-        new_lines.extend(lines[bounds["end"]:])
-        return "\n".join(new_lines)
+        # 已禁用
+        return note_md
 
     def _render_prompt(self, template_text: str, transcript: str, course_info: Dict[str, Any], meta: Dict[str, Any]) -> str:
         # 按模板格式化：保持已填字段不变，仅让 LLM 填 [FILL_HERE] 的字段
@@ -240,8 +205,6 @@ class LLMHandler:
                 content = (resp.choices[0].message.content or "").strip()
                 if content:
                     content = self._post_process_note(content)
-                    # 若 Anki 段落无 Cloze，则二次调用修复为 Cloze
-                    content = self._maybe_fix_anki_cloze_via_llm(content)
                 if content:
                     return content
                 self.logger.warning("[WARN] LLM returned empty content. attempt=%d", attempt)
