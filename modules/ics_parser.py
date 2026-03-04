@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, date, timedelta
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pytz
+from dateutil.rrule import rrulestr
 from ics import Calendar
 
 
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,38 +31,61 @@ class ICSParser:
         with open(ics_path, "r", encoding="utf-8") as f:
             cal = Calendar(f.read())
 
-        # 展开重复事件：以学期起始日期为中心，向后约 200 天的时间窗
         window_start = SHANGHAI_TZ.localize(datetime.strptime(start_date, "%Y-%m-%d")) - timedelta(days=7)
         window_end = window_start + timedelta(days=200)
 
-        try:
-            timeline = cal.timeline
-            timeline.start = window_start
-            timeline.stop = window_end
-            for occ in timeline:
-                begin_dt = occ.begin.datetime
-                end_dt = occ.end.datetime
-                if begin_dt.tzinfo is None:
-                    begin_dt = SHANGHAI_TZ.localize(begin_dt)
-                if end_dt.tzinfo is None:
-                    end_dt = SHANGHAI_TZ.localize(end_dt)
-                self._events.append(
-                    ParsedEvent(name=str(occ.name or ""), begin=begin_dt, end=end_dt)
-                )
-        except Exception:
-            # 回退：不展开，仅收集显式事件（可能遗漏重复实例）
-            for ev in cal.events:
-                begin_dt = ev.begin.datetime
-                end_dt = ev.end.datetime
-                if begin_dt.tzinfo is None:
-                    begin_dt = SHANGHAI_TZ.localize(begin_dt)
-                if end_dt.tzinfo is None:
-                    end_dt = SHANGHAI_TZ.localize(end_dt)
-                if window_start <= begin_dt <= window_end:
-                    self._events.append(ParsedEvent(name=str(ev.name or ""), begin=begin_dt, end=end_dt))
+        seen: Set[Tuple[str, datetime, datetime]] = set()
 
-        # 按时间排序，便于后续匹配
+        for ev in cal.events:
+            begin_dt = self._fix_tz(ev.begin.datetime)
+            end_dt = self._fix_tz(ev.end.datetime)
+            duration = end_dt - begin_dt
+
+            rrule_value = None
+            for line in ev.extra:
+                if hasattr(line, "name") and line.name == "RRULE":
+                    rrule_value = line.value
+                    break
+
+            if rrule_value:
+                naive_start = begin_dt.replace(tzinfo=None)
+                try:
+                    rule = rrulestr(f"RRULE:{rrule_value}", dtstart=naive_start)
+                except Exception:
+                    logger.debug("Failed to parse RRULE for '%s': %s", ev.name, rrule_value)
+                    self._add_event(seen, ev.name, begin_dt, end_dt, window_start, window_end)
+                    continue
+                for dt in rule:
+                    occ_begin = SHANGHAI_TZ.localize(dt)
+                    if occ_begin > window_end:
+                        break
+                    occ_end = occ_begin + duration
+                    self._add_event(seen, ev.name, occ_begin, occ_end, window_start, window_end)
+            else:
+                self._add_event(seen, ev.name, begin_dt, end_dt, window_start, window_end)
+
         self._events.sort(key=lambda e: e.begin)
+        logger.debug("ICS loaded: %d event occurrences in semester window", len(self._events))
+
+    def _add_event(
+        self, seen: Set[Tuple[str, datetime, datetime]],
+        name: Any, begin: datetime, end: datetime,
+        window_start: datetime, window_end: datetime,
+    ) -> None:
+        if not (window_start <= begin <= window_end):
+            return
+        key = (str(name or "").strip(), begin, end)
+        if key in seen:
+            return
+        seen.add(key)
+        self._events.append(ParsedEvent(name=key[0], begin=begin, end=end))
+
+    @staticmethod
+    def _fix_tz(dt: datetime) -> datetime:
+        """ics 库将无时区的浮动时间默认为 UTC，需重新解释为上海时间。"""
+        if dt.tzinfo is None or dt.utcoffset() == timedelta(0):
+            return SHANGHAI_TZ.localize(dt.replace(tzinfo=None))
+        return dt.astimezone(SHANGHAI_TZ)
 
     def _parse_date(self, s: str) -> date:
         return datetime.strptime(s, "%Y-%m-%d").date()
